@@ -1,0 +1,13 @@
+build/
+dist/
+*.log
+*.o
+*.obj
+.vs/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+fragnarokconfig.cfg
+qconsole.log
+.env

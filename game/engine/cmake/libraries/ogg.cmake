@@ -1,0 +1,26 @@
+# Opus streams are Ogg-wrapped too, so voice chat needs libogg even without Vorbis.
+if(NOT USE_CODEC_VORBIS AND NOT USE_CODEC_OPUS)
+    return()
+endif()
+
+if(NOT BUILD_CLIENT)
+    return()
+endif()
+
+include(utils/disable_warnings)
+
+set(INTERNAL_OGG_DIR ${SOURCE_DIR}/thirdparty/libogg-${OGG_VERSION})
+
+if(USE_INTERNAL_OGG)
+    file(GLOB_RECURSE OGG_SOURCES ${INTERNAL_OGG_DIR}/*.c)
+    disable_warnings(${OGG_SOURCES})
+    set(OGG_INCLUDE_DIRS ${INTERNAL_OGG_DIR}/include)
+    list(APPEND CLIENT_LIBRARY_SOURCES ${OGG_SOURCES})
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(OGG REQUIRED ogg)
+endif()
+
+list(APPEND CLIENT_LIBRARIES ${OGG_LIBRARIES})
+list(APPEND CLIENT_INCLUDE_DIRS ${OGG_INCLUDE_DIRS})
+list(APPEND CLIENT_DEFINITIONS ${OGG_DEFINITIONS})

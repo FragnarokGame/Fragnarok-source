@@ -1,0 +1,76 @@
+diff --git a/tools/mbspc/qcommon/q_platform.h b/tools/mbspc/qcommon/q_platform.h
+index d3b3b6b0..471d805f 100644
+--- a/tools/mbspc/qcommon/q_platform.h
++++ b/tools/mbspc/qcommon/q_platform.h
+@@ -156,6 +156,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ #define idx64 1
+ #define ARCH_STRING "x86_64"
+ #define Q3_LITTLE_ENDIAN
++#elif defined __aarch64__ || defined __arm64__
++#undef idx64
++#define idx64 1
++#define ARCH_STRING "arm64"
++#define Q3_LITTLE_ENDIAN
+ #endif
+ 
+ #define DLL_EXT ".dylib"
+diff --git a/tools/quake3/common/threads.cpp b/tools/quake3/common/threads.cpp
+index c292ee8f..e700840a 100644
+--- a/tools/quake3/common/threads.cpp
++++ b/tools/quake3/common/threads.cpp
+@@ -113,6 +113,9 @@ void RunThreadsOnIndividual( int workcnt, bool showpacifier, void ( *func )( int
+ 
+ #include <thread>
+ #include <mutex>
++#ifdef __APPLE__
++#include <pthread.h>
++#endif
+ 
+ std::mutex crit;
+ static bool enter;
+@@ -159,6 +162,24 @@ void RunThreadsOn( void ( *func )( int ) ){
+ 	{
+ 		threaded = true;
+ 
++#ifdef __APPLE__
++		// macOS patch: std::thread gets a 512KB stack on macOS (Windows build uses 4MB); vis/light overflow it -> bus error.
++		struct Arg { void ( *func )( int ); int i; };
++		pthread_t threads[MAX_THREADS];
++		Arg args[MAX_THREADS];
++		pthread_attr_t attr;
++		pthread_attr_init( &attr );
++		pthread_attr_setstacksize( &attr, 64 * 1024 * 1024 );
++
++		for ( int i = 0; i < numthreads; ++i ) {
++			args[i] = { func, i };
++			pthread_create( &threads[i], &attr, []( void *p ) -> void* { auto a = static_cast<Arg*>( p ); a->func( a->i ); return nullptr; }, &args[i] );
++		}
++
++		for ( int i = 0; i < numthreads; ++i )
++			pthread_join( threads[i], nullptr );
++		pthread_attr_destroy( &attr );
++#else
+ 		std::thread threads[MAX_THREADS];
+ 
+ 		for ( int i = 0; i < numthreads; ++i )
+@@ -166,6 +187,7 @@ void RunThreadsOn( void ( *func )( int ) ){
+ 
+ 		for ( int i = 0; i < numthreads; ++i )
+ 			threads[i].join();
++#endif
+ 
+ 		threaded = false;
+ 	}
+diff --git a/tools/quake3/q3map2/convert_bsp.cpp b/tools/quake3/q3map2/convert_bsp.cpp
+index bf7819b1..106cf077 100644
+--- a/tools/quake3/q3map2/convert_bsp.cpp
++++ b/tools/quake3/q3map2/convert_bsp.cpp
+@@ -807,7 +807,7 @@ int MergeBSPMain( Args& args ){
+ 	}
+ 
+ 	{
+-		entities.insert( entities.cend(), bsp.entities.cbegin() + 1, bsp.entities.cend() ); // minus world
++		entities.insert( entities.end(), std::make_move_iterator( bsp.entities.begin() + 1 ), std::make_move_iterator( bsp.entities.end() ) ); // minus world (macOS patch: move, libc++ needs copy-assign otherwise)
+ 		numBSPEntities = entities.size();
+ 		bspModels.insert( bspModels.cend(), bsp.bspModels.cbegin() + 1, bsp.bspModels.cend() ); // minus world
+ 		bspShaders.insert( bspShaders.cend(), bsp.bspShaders.cbegin(), bsp.bspShaders.cend() );
